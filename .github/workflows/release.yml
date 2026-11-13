@@ -1,0 +1,61 @@
+name: Release
+
+# Every push to main is tagged from its conventional commit messages:
+# fix/perf -> patch, feat -> minor, `!` or BREAKING CHANGE -> major, anything
+# else -> no release. The full vX.Y.Z tag never moves; the major tag (v1)
+# moves to the newest release in that major, so callers on @v1 get fixes and
+# features but never a breaking change.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/next-version.test.sh
+
+  release:
+    name: Tag release
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # One release at a time, in push order, so two pushes can't race for a tag.
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: version
+        run: |
+          last=$(git describe --tags --abbrev=0 --match 'v*.*.*' 2>/dev/null || true)
+          next=$(git log --format='%s%n%b' "${last:+$last..}HEAD" | scripts/next-version.sh "$last")
+          echo "last=$last" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "Last: ${last:-none}. Next: ${next:-no release}."
+
+      - if: steps.version.outputs.next != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT: ${{ steps.version.outputs.next }}
+        run: |
+          major=${NEXT%%.*}
+          git tag "$NEXT"
+          git tag -f "$major"
+          git push origin "$NEXT"
+          git push -f origin "$major"
+          gh release create "$NEXT" --generate-notes --verify-tag

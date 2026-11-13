@@ -1,0 +1,111 @@
+name: Claude PR overview
+description: Posts one comment explaining a pull request as diagrams (components, schema, external connections, similar code). Posts at most once per PR.
+
+# Needs, in the calling job: a checkout of the PR head with fetch-depth: 0, and
+# permissions id-token: write (for federation), contents: read and
+# pull-requests: write. Auth: either anthropic_api_key, or the four
+# anthropic_*_id federation inputs.
+
+inputs:
+  pr_number:
+    description: The pull request to explain.
+    default: ${{ github.event.pull_request.number || github.event.issue.number }}
+  github_token:
+    description: Token used to read the PR and post the comment.
+    default: ${{ github.token }}
+  anthropic_api_key:
+    description: Anthropic API key. Leave empty when using federation.
+    default: ''
+  anthropic_federation_rule_id:
+    description: Workload identity federation rule ID.
+    default: ''
+  anthropic_organization_id:
+    description: Anthropic organization ID, for federation.
+    default: ''
+  anthropic_service_account_id:
+    description: Anthropic service account ID, for federation.
+    default: ''
+  anthropic_workspace_id:
+    description: Anthropic workspace ID, for federation.
+    default: ''
+
+outputs:
+  posted:
+    description: "'true' when this run posted the overview, 'false' when one already existed."
+    value: ${{ steps.existing.outputs.has == 'false' }}
+
+runs:
+  using: composite
+  steps:
+    # Into the workspace, not .claude/skills: claude-code-action replaces the
+    # whole .claude/ tree with the PR base branch's copy before Claude runs.
+    - shell: bash
+      run: |
+        mkdir -p .review-skills
+        rm -rf .review-skills/pr-overview
+        cp -R "$GITHUB_ACTION_PATH" .review-skills/pr-overview
+
+    # One overview per PR, decided deterministically here rather than left to
+    # the agent, which sometimes bailed without posting even when there was
+    # none. Skips only when a marker comment really exists, so a re-fire (a
+    # draft→ready toggle) still can't double-post.
+    - id: existing
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        PR: ${{ inputs.pr_number }}
+      run: |
+        count=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json comments \
+          --jq '[.comments[] | select(.body | startswith("<!-- pr-overview -->"))] | length')
+        echo "has=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+    - if: steps.existing.outputs.has == 'false'
+      uses: anthropics/claude-code-action@v1
+      with:
+        github_token: ${{ inputs.github_token }}
+        anthropic_api_key: ${{ inputs.anthropic_api_key }}
+        anthropic_federation_rule_id: ${{ inputs.anthropic_federation_rule_id }}
+        anthropic_organization_id: ${{ inputs.anthropic_organization_id }}
+        anthropic_service_account_id: ${{ inputs.anthropic_service_account_id }}
+        anthropic_workspace_id: ${{ inputs.anthropic_workspace_id }}
+
+        # Read plus gh, and Write for the comment body. Without Write it could
+        # only pass the body inline, and an overview quoting `${{ }}` or
+        # backticks reads as command substitution, so every attempt was
+        # refused and nothing was posted. It still never edits the branch
+        # when the token is contents: read.
+        claude_args: '--allowedTools "Bash(gh:*),Read,Grep,Glob,Write"'
+
+        # Every tool call and refusal in the log. Without it a run that posts
+        # nothing shows only a count of refused calls, not which ones.
+        show_full_output: true
+
+        prompt: |
+          Read .review-skills/pr-overview/SKILL.md and follow it exactly to
+          write an overview of pull request #${{ inputs.pr_number }}
+          in ${{ github.repository }}.
+
+          Read it from the checkout rather than relying on skill discovery,
+          and stop with an error if the file is missing.
+
+          This is an automated run. Write the overview with the Write tool to
+          `pr-overview.md` in the working directory, its first line
+          `<!-- pr-overview -->`, then post it as ONE PR comment with
+          `gh pr comment <number> --body-file pr-overview.md`. Never pass the
+          body inline with --body.
+
+    # The action reports success whether or not a comment went up, so a run
+    # that posted nothing would pass silently. Fail it instead.
+    - name: Check the overview was posted
+      if: steps.existing.outputs.has == 'false'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        PR: ${{ inputs.pr_number }}
+      run: |
+        count=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json comments \
+          --jq '[.comments[] | select(.body | startswith("<!-- pr-overview -->"))] | length')
+        if [ "$count" -eq 0 ]; then
+          echo "::error::No PR overview comment was posted. The log above lists each tool call and any refused ones."
+          exit 1
+        fi

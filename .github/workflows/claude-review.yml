@@ -1,0 +1,100 @@
+name: Claude review
+
+# Ready-made overview + review, built from the pr-overview and pr-review
+# actions in this repo. Use those directly for other triggers or jobs.
+#
+# Advisory by design. Do not make this a required status check: a
+# non-deterministic reviewer as a merge gate blocks on its own flakiness and
+# teaches people to bypass it. CI is the check that should be required.
+#
+# Auth: set the ANTHROPIC_API_KEY secret, or the four ANTHROPIC_*_ID variables
+# for workload identity federation. How to call it: README.md.
+
+on:
+  workflow_call:
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: false
+
+jobs:
+  # Runs once when the PR is opened or marked ready. No comment trigger and no
+  # `reopened`, so it never re-runs.
+  overview:
+    name: Overview
+    # Dependabot-triggered runs get a read-only token and no secrets, so both
+    # jobs would fail on every Dependabot PR.
+    if: >-
+      github.event_name == 'pull_request'
+      && github.actor != 'dependabot[bot]'
+      && github.event.pull_request.draft == false
+      && github.event.action != 'reopened'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: yard-labs/github-actions/pr-overview@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          anthropic_workspace_id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+
+  review:
+    name: Review
+    # Runs after the overview so the overview is the first thing on the PR.
+    # `!cancelled()` instead of the implicit success(): the overview is skipped
+    # on comment re-reviews and reopens, and a failed overview must not cost
+    # the PR its review.
+    needs: overview
+    #
+    # Drafts are opened to share work in progress, not to be reviewed.
+    #
+    # On a comment: `issue.pull_request` is only present when the issue is a
+    # PR, so comments on real issues never match. The two phrases are the whole
+    # gate here — the action itself additionally refuses commenters without
+    # write access (`allowed_non_write_users`) and bots (`allowed_bots`).
+    #
+    # `startsWith`, not `contains`: READMEs quote the phrase, so matching
+    # anywhere in the body means citing the docs starts a review, and so does
+    # "don't @claude review this until CI is green".
+    if: >-
+      !cancelled()
+      && github.actor != 'dependabot[bot]'
+      && ((github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+          || (github.event.issue.pull_request
+              && (startsWith(github.event.comment.body, '@claude review')
+                  || startsWith(github.event.comment.body, '@claude re-review'))))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: the review diffs the head against the base, and a
+          # shallow clone has no base to diff against.
+          fetch-depth: 0
+          # An `issue_comment` run checks out the DEFAULT BRANCH, not the PR —
+          # its GITHUB_REF is main. Left alone, the review would read main's
+          # version of every file while reporting on the PR, and nothing would
+          # error. Pin the PR head. Empty string keeps the default for
+          # `pull_request`, which already checks out the right thing.
+          ref: >-
+            ${{ github.event.issue.pull_request
+                && format('refs/pull/{0}/head', github.event.issue.number) || '' }}
+      - uses: yard-labs/github-actions/pr-review@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_federation_rule_id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          anthropic_organization_id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          anthropic_service_account_id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          anthropic_workspace_id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}

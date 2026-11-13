@@ -1,6 +1,6 @@
 # github-actions
 
-[![Latest release](https://img.shields.io/github/v/release/yard-labs/github-actions?sort=semver&label=latest)](https://github.com/yard-labs/github-actions/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/yard-labs/github-actions/release.yml?branch=main&label=ci)](https://github.com/yard-labs/github-actions/actions/workflows/release.yml?query=branch%3Amain) [![Latest release](https://img.shields.io/github/v/release/yard-labs/github-actions?sort=semver&label=latest)](https://github.com/yard-labs/github-actions/releases/latest)
 
 Shared GitHub Actions from [Yard Labs](https://yardlabs.co): an automated PR
 overview and a Claude code review, usable together or apart.
@@ -176,8 +176,11 @@ Pin one of:
   `claude-review.yml` is therefore not reviewed.
 - Keep the `@claude review` phrases in the callers' `concurrency` in step with
   the review job's `if`.
-- `scripts/next-version.sh` decides each release; `scripts/next-version.test.sh`
-  runs on every push and PR.
+- `.github/workflows/ci.yml` runs on every PR and before every release:
+  actionlint (with shellcheck), a shape check of both actions, gitleaks over
+  the full history, and the versioning tests. A red build is never tagged.
+- `scripts/next-version.sh` decides each release. Use `ci:`, `docs:` or
+  `chore:` for changes that should not release.
 
 ## Licence
 

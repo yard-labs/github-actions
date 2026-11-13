@@ -9,24 +9,18 @@ name: Release
 on:
   push:
     branches: [main]
-  pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-      - run: scripts/next-version.test.sh
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
 
   release:
     name: Tag release
-    needs: test
-    if: github.event_name == 'push'
+    needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # One release at a time, in push order, so two pushes can't race for a tag.

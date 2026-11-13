@@ -1,0 +1,58 @@
+name: CI
+
+# Runs on every PR. On main it runs as the first job of the Release workflow,
+# so nothing is tagged unless all of this passes.
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # Includes shellcheck for every run: block.
+      - run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
+
+  actions:
+    name: Check actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # actionlint does not read composite action.yml files, so check the
+      # shape here, and that each action ships the skill its prompt reads.
+      - run: |
+          for dir in pr-overview pr-review; do
+            yq -e '.name and .description and .runs.using == "composite"' "$dir/action.yml" > /dev/null \
+              || { echo "::error file=$dir/action.yml::needs name, description and runs.using: composite"; exit 1; }
+            grep -q "^name: $dir$" "$dir/SKILL.md" \
+              || { echo "::error file=$dir/SKILL.md::frontmatter name must be $dir"; exit 1; }
+            grep -q ".review-skills/$dir/SKILL.md" "$dir/action.yml" \
+              || { echo "::error file=$dir/action.yml::prompt must read .review-skills/$dir/SKILL.md"; exit 1; }
+          done
+          echo "Both actions are well formed."
+
+  gitleaks:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --no-banner --redact
+
+  test:
+    name: Test versioning
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/next-version.test.sh

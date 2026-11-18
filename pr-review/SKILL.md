@@ -105,7 +105,7 @@ A finding without a named replacement is an opinion, not a review comment:
 
 **Close the pass** with the only metric that matters: `net: -<N> lines possible.` If there is nothing to cut, say `Lean already. Ship.` and move on.
 
-### Warnings (should fix as fast-follow)
+### Warnings (fix before merge)
 - Functions >25 lines — suggest extraction
 - Untyped multi-property parameters/returns — suggest interfaces
 - Missing retry logic / timeouts on third-party API calls
@@ -148,17 +148,18 @@ suggested fix here
 ## Severity Levels
 
 - **🔴 BLOCKER**: Must fix before merge (security, breaking changes, missing tests for core functionality)
-- **🟠 WARNING**: Should fix as a fast-follow (code quality, maintainability, unjustified complexity — doesn't block merge)
-- **🟡 SUGGESTION**: Nice to have (style, minor improvements)
+- **🟠 WARNING**: Fix before merge (code quality, maintainability, unjustified complexity)
+- **🟡 SUGGESTION**: Nice to have, a fast-follow (style, minor improvements — doesn't block merge)
 - **💬 QUESTION**: Needs clarification from author
 
-## Decision: approve vs human review
+## Decision: approve, request changes, or human sign-off
 
-**Approve** when ALL hold: no 🔴 blockers, you're confident the change is correct, the PR is a reasonable size to review with confidence, and the change is not risky (below). 🟠 Warnings and 🟡 suggestions do **not** block — note them as fast-follows and approve anyway.
+**Approve** when ALL hold: no 🔴 blockers or 🟠 warnings, you're confident the change is correct, the PR is a reasonable size to review with confidence, and the change is not risky (below). 🟡 Suggestions do **not** block — note them as fast-follows and approve anyway.
 
-**Require human review** (do NOT approve; `--request-changes` with a clear **`⚠️ HUMAN REVIEW NEEDED`** note saying which) when ANY holds:
+**Request changes** (`--request-changes`) only when a 🔴 **Blocker** (see [Blockers](#blockers-must-fix) above) or a 🟠 **Warning** is present: something in the code must change before merge.
 
-- a 🔴 **Blocker** is present (see [Blockers](#blockers-must-fix) above);
+**Require human sign-off** (do NOT approve; `--comment` with a clear **`⚠️ HUMAN REVIEW NEEDED`** note saying which) when there is no blocker or warning but ANY of these holds. Nothing needs changing, so don't request changes: that blocks the PR on a fix nobody can make.
+
 - **uncertainty** — you can't confidently verify correctness from the diff + files;
 - the PR is **too large** to review with confidence (size / scope sprawl);
 - the change is **risky**: it changes how one of these behaves, not just code near it:
@@ -179,10 +180,13 @@ After posting inline comments, submit the overall review.
 **If this review is automated** (not a manual human review), say so **once, here in the summary body** — e.g. a leading line like `🤖 Automated review — advisory; a human should still review and merge.` Do NOT repeat the caveat on every inline comment.
 
 ```bash
-# Only if NO blockers AND nothing flagged for human review (see above)
+# Only if NO blockers or warnings AND nothing flagged for human review (see above)
 gh pr review $ARGUMENTS --approve --body "LGTM! [optional brief note]"
 
-# If blockers found
+# No blockers or warnings, but human sign-off needed: same body, Overall "⚠️ HUMAN REVIEW NEEDED: <which and why>", no Required Changes
+gh pr review $ARGUMENTS --comment --body "..."
+
+# If blockers or warnings found
 gh pr review $ARGUMENTS --request-changes --body "$(cat <<'EOF'
 ## Review Summary
 
@@ -197,7 +201,7 @@ gh pr review $ARGUMENTS --request-changes --body "$(cat <<'EOF'
 - ✨ [Positive feedback on good patterns]
 
 ### Required Changes
-1. [List blockers]
+1. [List blockers and warnings]
 
 ### Testing gaps
 - [Behaviour changed without a test, or "None"]
@@ -211,7 +215,7 @@ EOF
 )"
 ```
 
-The approve body carries the same three sections. Write "None" under Testing gaps and Residual risks when there is nothing to list; Coverage is always filled in.
+The approve and sign-off bodies carry the same three sections. Write "None" under Testing gaps and Residual risks when there is nothing to list; Coverage is always filled in.
 
 ## Rules
 
@@ -222,8 +226,9 @@ The approve body carries the same three sections. Write "None" under Testing gap
 - DO acknowledge good patterns and clever solutions with a brief ✨
 - DO ask questions when intent is unclear rather than assuming it's wrong
 - DO question whether each new abstraction, config knob, or code path earns its cost — flag unjustified complexity even when the code "works"
-- DO approve when there are no blockers — 🟠 warnings and 🟡 suggestions are fast-follows, not merge gates
-- DO flag **`⚠️ HUMAN REVIEW NEEDED`** and request changes (never approve) when you're uncertain the code is correct, any 🔴 Blocker is met, the PR is too large to review confidently, or the change is risky as defined in the Decision section
+- DO approve when there are no blockers or warnings — 🟡 suggestions are fast-follows, not merge gates
+- DO request changes only for a 🔴 Blocker or 🟠 Warning
+- DO flag **`⚠️ HUMAN REVIEW NEEDED`** in a comment review (never approve, never request changes) when there is no blocker or warning but you're uncertain the code is correct, the PR is too large to review confidently, or the change is risky as defined in the Decision section
 - If in doubt about whether something is worth commenting on — skip it
 
 ## Attribution

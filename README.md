@@ -8,7 +8,7 @@ overview and a Claude code review, usable together or apart.
 | Action | What it does | Rules |
 |---|---|---|
 | `yard-labs/github-actions/pr-overview@v1` | Posts one comment explaining the PR as diagrams: components, schema, external connections, similar code elsewhere. Never posts twice on the same PR. | `pr-overview/SKILL.md` |
-| `yard-labs/github-actions/pr-review@v1` | Reviews the PR with inline comments and one summary review; approves, or asks for human review on blockers, risky or uncertain changes. | `pr-review/SKILL.md` |
+| `yard-labs/github-actions/pr-review@v1` | Reviews the PR with inline comments and one summary review: requests changes on blockers and warnings, comments asking for human sign-off on risky or uncertain changes, and otherwise approves. | `pr-review/SKILL.md` |
 | `yard-labs/github-actions/.github/workflows/claude-review.yml@v1` | Ready-made workflow running both: the overview when a PR opens, then the review, and a re-review on `@claude review`. | |
 
 Both are advisory. Do not make either a required status check: a

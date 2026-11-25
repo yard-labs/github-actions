@@ -74,7 +74,7 @@ runs:
         # backticks reads as command substitution, so every attempt was
         # refused and nothing was posted. It still never edits the branch
         # when the token is contents: read.
-        claude_args: '--allowedTools "Bash(gh:*),Read,Grep,Glob,Write"'
+        claude_args: '--model claude-haiku-5-5 --allowedTools "Bash(gh:*),Read,Grep,Glob,Write"'
 
         # Every tool call and refusal in the log. Without it a run that posts
         # nothing shows only a count of refused calls, not which ones.

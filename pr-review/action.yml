@@ -56,7 +56,7 @@ runs:
 
         # Read-only plus gh, which is what posting a review needs. No write
         # tools: this reviews, it never edits the branch.
-        claude_args: '--allowedTools "Bash(gh:*),Read,Grep,Glob"'
+        claude_args: '--model claude-sonnet-5-5 --allowedTools "Bash(gh:*),Read,Grep,Glob"'
 
         prompt: |
           Read .review-skills/pr-review/SKILL.md and follow it exactly to
